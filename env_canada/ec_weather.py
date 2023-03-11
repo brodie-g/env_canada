@@ -512,13 +512,19 @@ class ECWeather(object):
             )
 
     def daily_forecasts_pretty(self):
-        """Return a nicely formatting string version of the daily forecast"""
+        """Return a nicely formatted string version of the daily forecast"""
         def format_line (line):
             return f'{line["period"]}:  {line["text_summary"]}'
 
         formatted_lines = [format_line(line) for line in self.daily_forecasts]
+        header_lines = [
+            f'{self.metadata["station"]} 7 day forecast issued at {self.forecast_time}:'
+        ]
+        footer_lines = [
+            f'{self.metadata["attribution"]}'
+        ]
 
-        return "\n".join(formatted_lines)
+        return "\n".join(header_lines + formatted_lines + footer_lines)
 
 class ECWeatherUpdateFailed(Exception):
     """Raised when an update fails to get usable data."""
