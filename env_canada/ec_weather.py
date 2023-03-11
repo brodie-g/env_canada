@@ -272,6 +272,24 @@ def closest_site(site_list, lat, lon):
     return "{}/{}".format(closest["Province Codes"], closest["Codes"])
 
 
+def city_search(site_list, city_search_term):
+    """Return the province/site_code of the closest string match of the given city search"""
+
+    NAME_KEY = 'English Names'
+
+    sites_found = [site for site in site_list if city_search_term.lower() in site[NAME_KEY].lower()]
+
+    if len(sites_found) == 0:
+        return None
+
+    # look for exact match
+    exact_match = next((site for site in sites_found if city_search_term.lower() == site[NAME_KEY].lower()), None)
+
+    site = exact_match or sites_found[0]
+
+    return site
+
+
 class ECWeather(object):
 
     """Get weather data from Environment Canada."""
@@ -283,8 +301,8 @@ class ECWeather(object):
             vol.All(
                 {
                     vol.Required(
-                        vol.Any("station_id", "coordinates"),
-                        msg="Must specify either 'station_id' or 'coordinates'",
+                        vol.Any("station_id", "coordinates", "city"),
+                        msg="Must specify either 'station_id', 'coordinates', or 'city",
                     ): object,
                     vol.Optional("language"): object,
                 },
@@ -294,6 +312,7 @@ class ECWeather(object):
                         vol.All(vol.Or(int, float), vol.Range(-90, 90)),
                         vol.All(vol.Or(int, float), vol.Range(-180, 180)),
                     ),
+                    vol.Optional("city"): str,
                     vol.Optional("language", default="english"): vol.In(
                         ["english", "french"]
                     ),
@@ -314,14 +333,18 @@ class ECWeather(object):
         self.forecast_time = ""
         self.site_list = []
 
+        self.station_id = None
+        self.lat = None
+        self.lon = None
+        self.city_search_term = None
+
         if "station_id" in kwargs and kwargs["station_id"] is not None:
             self.station_id = kwargs["station_id"]
-            self.lat = None
-            self.lon = None
-        else:
-            self.station_id = None
+        elif "coordinates" in kwargs and kwargs["coordinates"] is not None:
             self.lat = kwargs["coordinates"][0]
             self.lon = kwargs["coordinates"][1]
+        else:
+            self.city_search_term = kwargs["city"]
 
     async def update(self):
         """Get the latest data from Environment Canada."""
@@ -339,10 +362,17 @@ class ECWeather(object):
                             break
                 if not self.lat:
                     raise ec_exc.UnknownStationId
-            else:
+            elif self.lat is not None and self.lon is not None:
                 self.station_id = closest_site(self.site_list, self.lat, self.lon)
                 if not self.station_id:
                     raise ec_exc.UnknownStationId
+            else:
+                site_found = city_search(self.site_list, self.city_search_term)
+                if not site_found:
+                    raise ec_exc.UnknownStationId
+                self.station_id = "{}/{}".format(site_found["Province Codes"], site_found["Codes"])
+                self.lat = site_found["Latitude"]
+                self.lon = site_found["Longitude"]
 
         LOG.debug(
             "update(): station %s lat %f lon %f", self.station_id, self.lat, self.lon
@@ -481,6 +511,14 @@ class ECWeather(object):
                 }
             )
 
+    def daily_forecasts_pretty(self):
+        """Return a nicely formatting string version of the daily forecast"""
+        def format_line (line):
+            return f'{line["period"]}:  {line["text_summary"]}'
+
+        formatted_lines = [format_line(line) for line in self.daily_forecasts]
+
+        return "\n".join(formatted_lines)
 
 class ECWeatherUpdateFailed(Exception):
     """Raised when an update fails to get usable data."""

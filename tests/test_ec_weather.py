@@ -23,8 +23,24 @@ def test_weather():
     return ECWeather(coordinates=(50, -100))
 
 
+@pytest.fixture()
+def test_weather_city():
+    return ECWeather(city='Halifax')
+
+
 def test_update(test_weather):
     asyncio.run(test_weather.update())
     assert test_weather.conditions
     assert test_weather.daily_forecasts
     assert test_weather.hourly_forecasts
+
+
+def test_update_city(test_weather_city):
+    asyncio.run(test_weather_city.update())
+    assert test_weather_city.conditions
+    assert test_weather_city.daily_forecasts
+    assert test_weather_city.hourly_forecasts
+
+def test_forecast_pretty(test_weather_city):
+    asyncio.run(test_weather_city.update())
+    assert test_weather_city.daily_forecasts_pretty()
